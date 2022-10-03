@@ -12,10 +12,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+/*
+Color Pallet:
+background: #3f434a
+walls:      #1d1f24
+hero:       #ffffff
+monsters:   #ff0000
+coins:      #d4a94e
+*/
+
 public class Application {
     public static void main(String[] args) {
         try {
-            Game game = new Game();
+            Game game = new Game(40, 20, 1);
             game.run();
         } catch (IOException e) {
             e.printStackTrace();
@@ -27,10 +36,10 @@ class Game {
     private Screen screen;
     private Arena arena;
 
-    public Game () throws IOException {
-        int width = 40, height = 20;
-        TerminalSize terminalSize = new TerminalSize(width,height);
-        arena = new Arena(width, height);
+    public Game (int width, int height, int scale) throws IOException {
+        width -= (width % scale); height -= (height % scale);
+        TerminalSize terminalSize = new TerminalSize((width + 2) * scale,(height + 4) * scale);
+        arena = new Arena(width, height, scale);
         DefaultTerminalFactory terminalFactory = new
                 DefaultTerminalFactory().setInitialTerminalSize(terminalSize);
         Terminal terminal = terminalFactory.createTerminal();
@@ -45,7 +54,6 @@ class Game {
             draw();
             KeyStroke key = screen.readInput();
             if(!processKey(key)) break;
-            arena.moveMonsters();
             if(arena.verifyMonsterCollisions()) break;
         }
         screen.close();
@@ -63,19 +71,21 @@ class Game {
 }
 
 class Arena {
-    private int width, height, score;
+    private int width, height, scale;
+    private List<Wall> cosmeticWalls;
     private List<Wall> walls;
     private List<Coin> coins;
     private List<Monster> monsters;
     private Hero hero;
-    public Arena(int width, int height) {
+    public Arena(int width, int height, int scale) {
         this.width = width;
         this.height = height;
+        this.scale = scale;
         hero = new Hero(10, 10);
         walls = createWalls();
+        cosmeticWalls = createCosmeticWalls();
         coins = createCoins();
         monsters = createMonsters();
-        score = 0;
     }
 
     public boolean processKey(KeyStroke key) {
@@ -109,6 +119,7 @@ class Arena {
                     retrieveCoins(i);
                     break;
                 }
+            moveMonsters();
         }
     }
     private boolean canMoveTo(Position pos) {
@@ -122,23 +133,28 @@ class Arena {
         return true;
     }
     public void draw(TextGraphics graphics) {
-        graphics.setBackgroundColor(TextColor.Factory.fromString("#336699"));
-        graphics.fillRectangle(new TerminalPosition(0,0), new TerminalSize(width, height), ' ');
-        hero.draw(graphics);
-        for(Wall wall : walls) wall.draw(graphics);
-        for(Coin coin : coins) coin.draw(graphics);
-        for(Monster monster : monsters) monster.draw(graphics);
+        graphics.setBackgroundColor(TextColor.Factory.fromString("#3f434a"));
+        graphics.fillRectangle(new TerminalPosition(scale,scale), new TerminalSize(width * scale, (height + 3) * scale), ' ');
+        hero.draw(graphics, scale);
+        hero.drawHealthAndScore(graphics, width, height, scale);
+        for(Wall wall : cosmeticWalls) wall.draw(graphics, scale);
+        for(Wall wall : walls) wall.draw(graphics, scale);
+        for(Coin coin : coins) coin.draw(graphics, scale);
+        for(Monster monster : monsters) monster.draw(graphics, scale);
     }
 
-    private List<Wall> createWalls() {
+    private List<Wall> createWalls(){ return new ArrayList<>(); }
+
+    private List<Wall> createCosmeticWalls() {
         List<Wall> walls = new ArrayList<>();
         for(int c = 0; c < width; c++) {
-            walls.add(new Wall(c, 0));
-            walls.add(new Wall(c, height - 1));
+            walls.add(new Wall(c, -1));
+            walls.add(new Wall(c, height));
+            walls.add(new Wall(c, height + 2));
         }
-        for(int r = 1; r < height - 1; r++) {
-            walls.add(new Wall(0, r));
-            walls.add(new Wall(width - 1, r));
+        for(int r = -1; r < height + 3; r++) {
+            walls.add(new Wall(-1, r));
+            walls.add(new Wall(width, r));
         }
         return walls;
     }
@@ -167,7 +183,7 @@ class Arena {
 
     private void retrieveCoins(int index){
         coins.remove(index);
-        score++;
+        hero.addScore();
         if (coins.size() == 0) {
             coins = createCoins();
             addMonster();
@@ -225,8 +241,10 @@ class Arena {
     public boolean verifyMonsterCollisions() {
         for(Monster monster : monsters)
             if(monster.getPos().equals(hero.getPos())) {
-                System.out.println("You lost! You caught " + score + " coins.");
-                return true;
+                if(hero.damaged(40)){
+                    System.out.println("You lost! You caught " + hero.getScore() + " coins.");
+                    return true;
+                }
             }
         return false;
     }
@@ -239,39 +257,61 @@ class Element {
     public Position getPos() { return pos; }
     public void setPos(Position pos) { this.pos = pos; }
 
-    public void draw(TextGraphics graphics, String str, String color) {
+    public void draw(TextGraphics graphics, String str, String color, int scale) {
         graphics.setForegroundColor(TextColor.Factory.fromString(color));
         graphics.enableModifiers(SGR.BOLD);
-        graphics.putString(new TerminalPosition(pos.getX(), pos.getY()), str);
+        str = str.repeat(scale);
+        for(int i = 0; i < scale; i++)
+            graphics.putString(new TerminalPosition((pos.getX() + 1) * scale, (pos.getY() + 1) * scale + i), str);
     }
 }
 
-class Hero extends Element{
+class Hero extends Element {
+    private int health = 100, score = 0;
     public Hero(int x, int y) { super(x, y); }
+
+    public int getScore() { return score; }
 
     public Position moveUp() { return new Position(pos.getX(), pos.getY() - 1); }
     public Position moveDown() { return new Position(pos.getX(), pos.getY() + 1); }
     public Position moveLeft() { return new Position(pos.getX() - 1, pos.getY()); }
     public Position moveRight() { return new Position(pos.getX() + 1, pos.getY()); }
 
-    public void draw(TextGraphics graphics){
-        super.draw(graphics, "X", "#ffffff");
+    public void draw(TextGraphics graphics, int scale){
+        super.draw(graphics, "X", "#ffffff", scale);
     }
+    public void drawHealthAndScore(TextGraphics graphics, int width, int height, int scale){
+        String str = "+";
+        str = str.repeat(health * (width * scale - 3) / 100);
+        String color = "#00ff00";
+        if (health <= 20) color = "#ff0000";
+        else if (health <= 60) color = "#ffff00";
+        graphics.setForegroundColor(TextColor.Factory.fromString(color));
+        for (int i = 0; i < scale; i++)
+            graphics.putString(new TerminalPosition(scale, (height + 2) * scale + i), str);
+        graphics.setForegroundColor(TextColor.Factory.fromString("#ffff00"));
+        graphics.putString(new TerminalPosition((width + 1) * scale - 3,(height + 3) * scale - 1), String.format("%03d", score));
+    }
+    public boolean damaged(int amount){
+        health -= amount;
+        return health == 0;
+    }
+    public void addScore() { score++; }
 }
 
-class Wall extends Element{
+class Wall extends Element {
     public Wall(int x, int y) { super(x, y); }
 
-    public void draw(TextGraphics graphics) {
-        super.draw(graphics, "O", "#00033d");
+    public void draw(TextGraphics graphics, int scale) {
+        super.draw(graphics, "O", "#1d1f24", scale);
     }
 }
 
 class Coin extends Element {
     public Coin(int x, int y) { super(x, y); }
 
-    public void draw(TextGraphics graphics) {
-        super.draw(graphics, "*", "#d4a94e");
+    public void draw(TextGraphics graphics, int scale) {
+        super.draw(graphics, "*", "#d4a94e", scale);
     }
 }
 
@@ -294,8 +334,8 @@ class Monster extends Element {
         }
     }
 
-    public void draw(TextGraphics graphics) {
-        super.draw(graphics, "$", "#ff6363");
+    public void draw(TextGraphics graphics, int scale) {
+        super.draw(graphics, "$", "#ff0000", scale);
     }
 }
 
