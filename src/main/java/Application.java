@@ -134,7 +134,7 @@ class Arena {
     }
     public void draw(TextGraphics graphics) {
         graphics.setBackgroundColor(TextColor.Factory.fromString("#3f434a"));
-        graphics.fillRectangle(new TerminalPosition(scale,scale), new TerminalSize(width * scale, (height + 3) * scale), ' ');
+        graphics.fillRectangle(new TerminalPosition(scale,scale), new TerminalSize(width * scale, (height + 1) * scale), ' ');
         hero.draw(graphics, scale);
         hero.drawHealthAndScore(graphics, width, height, scale);
         for(Wall wall : cosmeticWalls) wall.draw(graphics, scale);
@@ -239,13 +239,19 @@ class Arena {
     }
 
     public boolean verifyMonsterCollisions() {
+        int heroX = hero.getPos().getX();
+        int heroY = hero.getPos().getY();
+        Position[] positions = {hero.getPos(), new Position(heroX, heroY - 1), new Position(heroX, heroY + 1),
+                                new Position(heroX - 1, heroY), new Position(heroX + 1, heroY)};
         for(Monster monster : monsters)
-            if(monster.getPos().equals(hero.getPos())) {
-                if(hero.damaged(40)){
-                    System.out.println("You lost! You caught " + hero.getScore() + " coins.");
-                    return true;
+            for(Position pos : positions)
+                if(monster.getPos().equals(pos)) {
+                    if(hero.damaged(40)){
+                        System.out.println("You lost! You caught " + hero.getScore() + " coins.");
+                        return true;
+                    }
+                    break;
                 }
-            }
         return false;
     }
 }
@@ -257,12 +263,16 @@ class Element {
     public Position getPos() { return pos; }
     public void setPos(Position pos) { this.pos = pos; }
 
-    public void draw(TextGraphics graphics, String str, String color, int scale) {
+    public void drawByChar(TextGraphics graphics, char c, String color, int scale) {
         graphics.setForegroundColor(TextColor.Factory.fromString(color));
         graphics.enableModifiers(SGR.BOLD);
-        str = str.repeat(scale);
-        for(int i = 0; i < scale; i++)
-            graphics.putString(new TerminalPosition((pos.getX() + 1) * scale, (pos.getY() + 1) * scale + i), str);
+        graphics.fillRectangle(new TerminalPosition((pos.getX() + 1) * scale, (pos.getY() + 1) * scale), new TerminalSize(scale, scale), c);
+    }
+
+    public void drawByColor(TextGraphics graphics, String color, int scale){
+        graphics.setBackgroundColor(TextColor.Factory.fromString(color));
+        graphics.fillRectangle(new TerminalPosition((pos.getX() + 1) * scale, (pos.getY() + 1) * scale), new TerminalSize(scale, scale), ' ');
+        graphics.setBackgroundColor(TextColor.Factory.fromString("#3f434a"));
     }
 }
 
@@ -277,24 +287,22 @@ class Hero extends Element {
     public Position moveLeft() { return new Position(pos.getX() - 1, pos.getY()); }
     public Position moveRight() { return new Position(pos.getX() + 1, pos.getY()); }
 
-    public void draw(TextGraphics graphics, int scale){
-        super.draw(graphics, "X", "#ffffff", scale);
-    }
+    public void draw(TextGraphics graphics, int scale){ super.drawByChar(graphics, 'X', "#ffffff", scale); }
     public void drawHealthAndScore(TextGraphics graphics, int width, int height, int scale){
-        String str = "+";
-        str = str.repeat(health * (width * scale - 3) / 100);
-        String color = "#00ff00";
-        if (health <= 20) color = "#ff0000";
-        else if (health <= 60) color = "#ffff00";
-        graphics.setForegroundColor(TextColor.Factory.fromString(color));
-        for (int i = 0; i < scale; i++)
-            graphics.putString(new TerminalPosition(scale, (height + 2) * scale + i), str);
+        String color = "#44aa44";
+        if (health <= 20) color = "#aa4444";
+        else if (health <= 60) color = "#aaaa00";
+        graphics.setBackgroundColor(TextColor.Factory.fromString(color));
+        int w = (health * (width * scale - 4) / 100);
+        if (w > 0) graphics.fillRectangle(new TerminalPosition(scale, (height + 2) * scale), new TerminalSize(w, scale), ' ');
+        graphics.setBackgroundColor(TextColor.Factory.fromString("#000000"));
         graphics.setForegroundColor(TextColor.Factory.fromString("#ffff00"));
-        graphics.putString(new TerminalPosition((width + 1) * scale - 3,(height + 3) * scale - 1), String.format("%03d", score));
+        graphics.putString(new TerminalPosition((width + 1) * scale - 4,(height + 3) * scale - 1), String.format("%04d", score));
+        graphics.setBackgroundColor(TextColor.Factory.fromString("#3f434a"));
     }
     public boolean damaged(int amount){
         health -= amount;
-        return health == 0;
+        return health <= 0;
     }
     public void addScore() { score++; }
 }
@@ -303,7 +311,7 @@ class Wall extends Element {
     public Wall(int x, int y) { super(x, y); }
 
     public void draw(TextGraphics graphics, int scale) {
-        super.draw(graphics, "O", "#1d1f24", scale);
+        super.drawByColor(graphics, "#1d1f24", scale);
     }
 }
 
@@ -311,7 +319,7 @@ class Coin extends Element {
     public Coin(int x, int y) { super(x, y); }
 
     public void draw(TextGraphics graphics, int scale) {
-        super.draw(graphics, "*", "#d4a94e", scale);
+        super.drawByChar(graphics, '*', "#d4a94e", scale);
     }
 }
 
@@ -335,7 +343,7 @@ class Monster extends Element {
     }
 
     public void draw(TextGraphics graphics, int scale) {
-        super.draw(graphics, "$", "#ff0000", scale);
+        super.drawByChar(graphics, 'O', "#ff0000", scale);
     }
 }
 
